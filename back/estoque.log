@@ -1,0 +1,38 @@
+Watching for file changes with StatReloader
+Watching for file changes with StatReloader
+Watching for file changes with StatReloader
+Watching for file changes with StatReloader
+C:\Users\51350152803\Desktop\SAEP-2025\back\mekanism\settings.py changed, reloading.
+Watching for file changes with StatReloader
+C:\Users\51350152803\Desktop\SAEP-2025\back\api\views.py changed, reloading.
+Watching for file changes with StatReloader
+"OPTIONS /api/register/ HTTP/1.1" 200 0
+Not Found: /api/register/
+"POST /api/register/ HTTP/1.1" 404 8125
+C:\Users\51350152803\Desktop\SAEP-2025\back\api\urls.py changed, reloading.
+Watching for file changes with StatReloader
+C:\Users\51350152803\Desktop\SAEP-2025\back\api\urls.py changed, reloading.
+Watching for file changes with StatReloader
+"OPTIONS /api/auth/register/ HTTP/1.1" 200 0
+Not Found: /api/auth/register/
+"POST /api/auth/register/ HTTP/1.1" 404 8140
+Not Found: /api/auth/register/
+"GET /api/auth/register/ HTTP/1.1" 404 8139
+Not Found: /favicon.ico
+"GET /favicon.ico HTTP/1.1" 404 8118
+Not Found: /api/auth/register/
+"POST /api/auth/register/ HTTP/1.1" 404 8140
+Watching for file changes with StatReloader
+Not Found: /api/auth/register/
+"POST /api/auth/register/ HTTP/1.1" 404 8140
+Not Found: /api/auth/register
+"GET /api/auth/register HTTP/1.1" 404 8136
+Not Found: /api/auth/
+"GET /api/auth/ HTTP/1.1" 404 8112
+Not Found: /api/auth/register
+"GET /api/auth/register HTTP/1.1" 404 8136
+Not Found: /api/auth/register/
+"GET /api/auth/register/ HTTP/1.1" 404 8139
+C:\Users\51350152803\Desktop\SAEP-2025\back\mekanism\settings.py changed, reloading.
+Watching for file changes with StatReloader
+"POST /api/auth/register/ HTTP/1.1" 201 136
