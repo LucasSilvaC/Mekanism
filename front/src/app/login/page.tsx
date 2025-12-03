@@ -17,14 +17,12 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      // Enviar credenciais para obter tokens JWT
+      // ENVIAR CREDENCIAIS - agora usa EMAIL mesmo
       const response = await fetch("http://localhost:8000/api/auth/login/", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email, // SimpleJWT pode aceitar email se configurado
+          email, // <-- Mude para email (não username)
           password,
         }),
       });
@@ -32,23 +30,26 @@ export default function LoginPage() {
       const data = await response.json();
 
       if (response.ok) {
-        // Salvar tokens no localStorage
+        // SALVAR NO LOCALSTORAGE
         localStorage.setItem("access_token", data.access);
         localStorage.setItem("refresh_token", data.refresh);
-        
-        // Salvar informações do usuário se disponíveis
+
+        // Adiciona user se existir na resposta
         if (data.user) {
           localStorage.setItem("user", JSON.stringify(data.user));
         }
-        
+
         toast.success("Login realizado com sucesso!");
-        
-        // Redirecionar para dashboard
+
+        // REDIRECIONAR
         setTimeout(() => {
-          router.push("/dashboard");
-        }, 1500);
+          router.push("/");
+        }, 1000);
       } else {
-        toast.error(data.detail || "Credenciais inválidas");
+        // Tenta diferentes formatos de erro
+        const errorMessage =
+          data.detail || data.error || "Credenciais inválidas";
+        toast.error(errorMessage);
       }
     } catch (error) {
       toast.error("Erro de conexão com o servidor");

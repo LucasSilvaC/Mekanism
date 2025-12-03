@@ -1,10 +1,43 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Header from "@/components/organisms/header";
 import Link from "next/link";
 import { HiArrowLeft } from "react-icons/hi2";
 import { FiArrowDownCircle, FiArrowUpCircle } from "react-icons/fi";
+import { toast } from "react-toastify";
+
+// Interface para produto do backend
+interface BackendProduto {
+  id: number;
+  codigo: string;
+  nome: string;
+  descricao: string;
+  categoria: number;
+  categoria_nome: string;
+  quantidade: string;
+  unidade: string;
+  preco_custo: string;
+  preco_venda: string;
+  estoque_minimo: string;
+  ativo: boolean;
+  estoque_baixo: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// Interface para movimentação do backend
+interface BackendMovimentacao {
+  id: number;
+  produto: number;
+  produto_nome: string;
+  tipo: string;
+  quantidade: string;
+  observacao: string;
+  usuario: number;
+  usuario_nome: string;
+  created_at: string;
+}
 
 export type ProdutoEstoque = {
   id: string;
@@ -13,52 +46,287 @@ export type ProdutoEstoque = {
   estoqueMinimo: number;
 };
 
-// 📌 Mock inicial
-const produtosMock: ProdutoEstoque[] = [
-  { id: "1", nome: "Broca Aço Rápido", estoqueAtual: 12, estoqueMinimo: 5 },
-  { id: "2", nome: "Chave Torx T10", estoqueAtual: 4, estoqueMinimo: 6 },
-  { id: "3", nome: "Serra Circular 7¼", estoqueAtual: 20, estoqueMinimo: 8 },
-];
 
 export default function EstoquePage() {
-  const [produtos, setProdutos] = useState<ProdutoEstoque[]>(produtosMock);
-
+  const [produtos, setProdutos] = useState<ProdutoEstoque[]>([]);
+  const [movimentacoes, setMovimentacoes] = useState<BackendMovimentacao[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadingMovimentacao, setLoadingMovimentacao] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
   const [selecionado, setSelecionado] = useState<ProdutoEstoque | null>(null);
 
-  const [tipoMov, setTipoMov] = useState<"entrada" | "saida">("entrada");
+  const [tipoMov, setTipoMov] = useState<"entrada" | "saida" | "ajuste">("entrada");
   const [quantidade, setQuantidade] = useState<number>(0);
   const [dataOperacao, setDataOperacao] = useState<string>("");
+
+  // Função para fazer requisições autenticadas
+  const apiRequest = async (endpoint: string, options: any = {}) => {
+    const token = localStorage.getItem('access_token');
+    
+    const headers = {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    };
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    
+    try {
+      const response = await fetch(`http://localhost:8000/api/${endpoint}`, {
+        ...options,
+        headers,
+      });
+      
+      // Se token expirou, tenta renovar
+      if (response.status === 401) {
+        const refreshToken = localStorage.getItem('refresh_token');
+        if (refreshToken) {
+          try {
+            const refreshResponse = await fetch('http://localhost:8000/api/auth/login/refresh/', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ refresh: refreshToken }),
+            });
+            
+            if (refreshResponse.ok) {
+              const refreshData = await refreshResponse.json();
+              localStorage.setItem('access_token', refreshData.access);
+              
+              // Tenta a requisição original novamente
+              headers['Authorization'] = `Bearer ${refreshData.access}`;
+              return fetch(`http://localhost:8000/api/${endpoint}`, {
+                ...options,
+                headers,
+              });
+            }
+          } catch (error) {
+            // Se não conseguir renovar, faz logout
+            localStorage.removeItem('access_token');
+            localStorage.removeItem('refresh_token');
+            localStorage.removeItem('user');
+            window.location.href = '/login';
+            return response;
+          }
+        }
+      }
+      
+      return response;
+    } catch (error) {
+      console.error('Network error:', error);
+      throw error;
+    }
+  };
+
+  // Carregar dados
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // Carregar produtos
+      const productsResponse = await apiRequest('produtos/');
+      
+      if (!productsResponse.ok) {
+        const errorData = await productsResponse.json();
+        console.error('API error:', errorData);
+        let errorMessage = 'Erro ao carregar produtos';
+        
+        if (errorData.detail) {
+          errorMessage = errorData.detail;
+        } else if (typeof errorData === 'string') {
+          errorMessage = errorData;
+        }
+        
+        setError(errorMessage);
+        return;
+      }
+      
+      const productsData = await productsResponse.json();
+      
+      // Verificar se a resposta tem o formato paginado do DRF
+      if (productsData.results && Array.isArray(productsData.results)) {
+        const productsArray = productsData.results;
+        
+        // Transformar dados do backend para o formato do frontend
+        const transformedProducts = productsArray.map((prod: BackendProduto): ProdutoEstoque => ({
+          id: prod.id.toString(),
+          nome: prod.nome,
+          estoqueAtual: Number(prod.quantidade),
+          estoqueMinimo: Number(prod.estoque_minimo),
+        }));
+        
+        setProdutos(transformedProducts);
+      } else {
+        console.error('Unexpected products response format:', productsData);
+        setError('Formato de resposta de produtos inválido');
+      }
+      
+      // Carregar movimentações
+      const movimentacoesResponse = await apiRequest('movimentacoes/');
+      
+      if (movimentacoesResponse.ok) {
+        const movimentacoesData = await movimentacoesResponse.json();
+        
+        if (movimentacoesData.results && Array.isArray(movimentacoesData.results)) {
+          setMovimentacoes(movimentacoesData.results);
+        }
+      } else {
+        console.warn('Failed to load movimentações:', movimentacoesResponse.status);
+        // Não mostrar erro para movimentações, pois pode ser que ainda não tenha nenhuma
+      }
+      
+    } catch (error) {
+      console.error('Erro ao carregar dados:', error);
+      setError('Erro de conexão com o servidor. Verifique sua conexão e tente novamente.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // ✔ Ordenação alfabética – RF24 / RF25
   const produtosOrdenados = useMemo(() => {
     return [...produtos].sort((a, b) => a.nome.localeCompare(b.nome));
   }, [produtos]);
 
-  const registrarMovimentacao = () => {
-    if (!selecionado) return;
+  const registrarMovimentacao = async () => {
+    if (!selecionado) {
+      toast.error("Selecione um produto primeiro");
+      return;
+    }
 
     const qtd = Number(quantidade);
-    if (qtd <= 0) return;
+    if (qtd <= 0) {
+      toast.error("Quantidade deve ser maior que zero");
+      return;
+    }
 
-    const atualizado = produtos.map((p) => {
-      if (p.id !== selecionado.id) return p;
+    // Validação específica para ajuste
+    if (tipoMov === "ajuste" && qtd < 0) {
+      toast.error("Quantidade de ajuste não pode ser negativa");
+      return;
+    }
 
-      const novoEstoque =
-        tipoMov === "entrada"
-          ? p.estoqueAtual + qtd
-          : p.estoqueAtual - qtd;
+    // Validação para saída: verificar se tem estoque suficiente
+    if (tipoMov === "saida" && selecionado.estoqueAtual < qtd) {
+      toast.error(`Estoque insuficiente. Disponível: ${selecionado.estoqueAtual}`);
+      return;
+    }
 
-      return { ...p, estoqueAtual: novoEstoque };
-    });
+    setLoadingMovimentacao(true);
+    
+    try {
+      // Enviar movimentação para o backend
+      const movimentacaoData = {
+        produto: parseInt(selecionado.id),
+        tipo: tipoMov.toUpperCase(),
+        quantidade: qtd,
+        observacao: `Movimentação de ${tipoMov} realizada por ${localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')!).username : 'usuário'}`,
+      };
 
-    setProdutos(atualizado);
+      const response = await apiRequest('movimentacoes/', {
+        method: 'POST',
+        body: JSON.stringify(movimentacaoData),
+      });
 
-    setQuantidade(0);
-    setDataOperacao("");
+      if (response.ok) {
+        // Movimentação criada com sucesso
+        const movimentacao = await response.json();
+        
+        // Atualizar o estoque local baseado no tipo de movimentação
+        const atualizado = produtos.map((p) => {
+          if (p.id !== selecionado.id) return p;
 
-    const novoProduto = atualizado.find((p) => p.id === selecionado.id)!;
-    setSelecionado(novoProduto);
+          let novoEstoque = p.estoqueAtual;
+          if (tipoMov === "entrada") {
+            novoEstoque = p.estoqueAtual + qtd;
+          } else if (tipoMov === "saida") {
+            novoEstoque = p.estoqueAtual - qtd;
+          } else if (tipoMov === "ajuste") {
+            novoEstoque = qtd;
+          }
+
+          return { ...p, estoqueAtual: novoEstoque };
+        });
+
+        setProdutos(atualizado);
+        setSelecionado({ ...selecionado, estoqueAtual: atualizado.find(p => p.id === selecionado.id)!.estoqueAtual });
+
+        // Recarregar movimentações e produtos para garantir dados atualizados
+        await fetchData();
+
+        const tipoTexto = tipoMov === "entrada" ? "entrada" : tipoMov === "saida" ? "saída" : "ajuste";
+        toast.success(`Movimentação de ${tipoTexto} registrada com sucesso!`);
+        
+        setQuantidade(0);
+        setDataOperacao("");
+      } else {
+        const errorData = await response.json();
+        let errorMessage = 'Erro ao registrar movimentação';
+        
+        if (errorData.detail) {
+          errorMessage = errorData.detail;
+        } else if (errorData.tipo) {
+          errorMessage = `Erro: ${errorData.tipo.join(', ')}`;
+        } else if (typeof errorData === 'string') {
+          errorMessage = errorData;
+        } else if (errorData.non_field_errors) {
+          errorMessage = errorData.non_field_errors.join(', ');
+        }
+        
+        toast.error(errorMessage);
+      }
+    } catch (error) {
+      console.error('Erro ao registrar movimentação:', error);
+      toast.error("Erro de conexão com o servidor. Verifique sua conexão e tente novamente.");
+    } finally {
+      setLoadingMovimentacao(false);
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-toolgear-black-125">
+        <Header />
+        <div className="flex items-center justify-center h-[calc(100vh-80px)]">
+          <div className="text-toolgear-gray-50">Carregando...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-toolgear-black-125">
+        <Header />
+        <div className="flex flex-col items-center justify-center h-[calc(100vh-80px)]">
+          <div className="text-toolgear-red-25 text-xl font-semibold mb-4">
+            Erro ao carregar dados
+          </div>
+          <div className="text-toolgear-gray-50 text-center mb-6 max-w-md">
+            {error}
+          </div>
+          <button
+            onClick={() => {
+              setError(null);
+              setRetryCount(0);
+              fetchData();
+            }}
+            className="px-6 py-2 bg-toolgear-purple-75 text-toolgear-gray-0 rounded-lg hover:bg-toolgear-purple-100 transition"
+          >
+            Tentar Novamente
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-toolgear-black-125">
@@ -119,7 +387,7 @@ export default function EstoquePage() {
               Histórico de entradas e saídas.
             </p>
             <div className="text-4xl font-bold text-toolgear-green-25">
-              156
+              {movimentacoes.length}
             </div>
           </div>
 
@@ -143,24 +411,32 @@ export default function EstoquePage() {
               </thead>
 
               <tbody>
-                {produtosOrdenados.map((produto) => (
-                  <tr
-                    key={produto.id}
-                    className="text-toolgear-gray-0 border-b border-toolgear-black-75/50"
-                  >
-                    <td className="py-3">{produto.nome}</td>
-                    <td>{produto.estoqueAtual}</td>
-                    <td>{produto.estoqueMinimo}</td>
-                    <td>
-                      <button
-                        className="px-3 py-1 text-sm rounded-lg bg-toolgear-purple-75 text-toolgear-gray-0 cursor-pointer hover:bg-toolgear-purple-100 transition"
-                        onClick={() => setSelecionado(produto)}
-                      >
-                        Selecionar
-                      </button>
+                {produtosOrdenados.length > 0 ? (
+                  produtosOrdenados.map((produto) => (
+                    <tr
+                      key={produto.id}
+                      className="text-toolgear-gray-0 border-b border-toolgear-black-75/50"
+                    >
+                      <td className="py-3">{produto.nome}</td>
+                      <td>{produto.estoqueAtual}</td>
+                      <td>{produto.estoqueMinimo}</td>
+                      <td>
+                        <button
+                          className="px-3 py-1 text-sm rounded-lg bg-toolgear-purple-75 text-toolgear-gray-0 cursor-pointer hover:bg-toolgear-purple-100 transition"
+                          onClick={() => setSelecionado(produto)}
+                        >
+                          Selecionar
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={4} className="py-8 text-center text-toolgear-gray-50">
+                      Nenhum produto encontrado no estoque
                     </td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>
@@ -208,6 +484,18 @@ export default function EstoquePage() {
                     <FiArrowDownCircle />
                     Saída
                   </button>
+
+                  <button
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition ${
+                      tipoMov === "ajuste"
+                        ? "bg-toolgear-blue-50 text-toolgear-gray-0 border-toolgear-blue-25"
+                        : "border-toolgear-gray-75 text-toolgear-gray-0"
+                    }`}
+                    onClick={() => setTipoMov("ajuste")}
+                  >
+                    ⚙️
+                    Ajuste
+                  </button>
                 </div>
 
                 <div>
@@ -242,11 +530,25 @@ export default function EstoquePage() {
                     </div>
                 )}
 
+                {tipoMov === "ajuste" && (
+                  <div className="text-toolgear-blue-25 text-sm">
+                    💡 Ajuste define o novo estoque para o valor informado
+                  </div>
+                )}
+
                 <button
                   onClick={registrarMovimentacao}
-                  className="w-full py-3 rounded-xl bg-toolgear-purple-75 text-toolgear-gray-0 font-semibold hover:bg-toolgear-purple-100 cursor-pointer transition"
+                  disabled={loadingMovimentacao}
+                  className="w-full py-3 rounded-xl bg-toolgear-purple-75 text-toolgear-gray-0 font-semibold hover:bg-toolgear-purple-100 cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Registrar Movimentação
+                  {loadingMovimentacao ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      Registrando...
+                    </span>
+                  ) : (
+                    'Registrar Movimentação'
+                  )}
                 </button>
 
               </div>

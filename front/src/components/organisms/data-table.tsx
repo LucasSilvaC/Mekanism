@@ -21,12 +21,16 @@ interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[]
   data: TData[]
   onAdd?: () => void
+  onEdit?: (item: TData) => void // <-- ADICIONE ESTA LINHA
+  onDelete?: (item: TData) => void // <-- Opcional, se precisar
 }
 
 export function DataTable<TData, TValue>({
   columns,
   data,
   onAdd,
+  onEdit, // <-- ADICIONE ESTA LINHA
+  onDelete,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])

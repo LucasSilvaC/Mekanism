@@ -14,7 +14,14 @@ export type Produto = {
   estoqueMinimo: number
 }
 
-export const columns: ColumnDef<Produto>[] = [
+// Interface para as funções de callback
+interface ColumnsProps {
+  onEdit?: (produto: Produto) => void
+  onDelete?: (produto: Produto) => void
+}
+
+// Função que cria as colunas com as funções de callback
+export const createColumns = ({ onEdit, onDelete }: ColumnsProps = {}): ColumnDef<Produto>[] => [
   {
     accessorKey: "nome",
     header: "Nome",
@@ -34,6 +41,23 @@ export const columns: ColumnDef<Produto>[] = [
   {
     accessorKey: "estoqueAtual",
     header: "Estoque Atual",
+    cell: ({ row }) => {
+      const estoque = row.original.estoqueAtual
+      const minimo = row.original.estoqueMinimo
+      
+      return (
+        <div className="flex items-center gap-2">
+          <span className={estoque <= minimo ? "text-red-400" : "text-green-400"}>
+            {estoque}
+          </span>
+          {estoque <= minimo && (
+            <span className="text-xs bg-red-500/20 text-red-300 px-2 py-1 rounded">
+              Baixo
+            </span>
+          )}
+        </div>
+      )
+    },
   },
   {
     accessorKey: "estoqueMinimo",
@@ -50,7 +74,7 @@ export const columns: ColumnDef<Produto>[] = [
           <Button
             variant="ghost"
             className="text-toolgear-purple-25 hover:text-toolgear-purple-75 cursor-pointer"
-            onClick={() => console.log("Editar", produto.id)}
+            onClick={() => onEdit?.(produto)}
           >
             <Pencil size={18} />
           </Button>
@@ -58,7 +82,7 @@ export const columns: ColumnDef<Produto>[] = [
           <Button
             variant="ghost"
             className="text-toolgear-red-50 hover:text-toolgear-red-75 cursor-pointer"
-            onClick={() => console.log("Excluir", produto.id)}
+            onClick={() => onDelete?.(produto)}
           >
             <Trash2 size={18} />
           </Button>
@@ -67,3 +91,6 @@ export const columns: ColumnDef<Produto>[] = [
     },
   },
 ]
+
+// Export padrão para manter compatibilidade (sem funções de callback)
+export const columns: ColumnDef<Produto>[] = createColumns()

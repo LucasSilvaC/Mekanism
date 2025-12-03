@@ -3,7 +3,9 @@ from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from django_filters.rest_framework import DjangoFilterBackend
-from django.db.models import Q
+from django.db.models import Q, F
+from rest_framework_simplejwt.tokens import RefreshToken
+from django.contrib.auth import authenticate
 from django.utils import timezone
 from django.contrib.auth import get_user_model
 from .models import Categoria, Produto, Movimentacao
@@ -131,7 +133,7 @@ class ProdutoViewSet(viewsets.ModelViewSet):
         
         estoque_baixo = self.request.query_params.get('estoque_baixo', None)
         if estoque_baixo is not None:
-            queryset = queryset.filter(quantidade__lte=models.F('estoque_minimo'))
+            queryset = queryset.filter(quantidade__lte=F('estoque_minimo'))
         
         search = self.request.query_params.get('search', None)
         if search:
@@ -145,7 +147,7 @@ class ProdutoViewSet(viewsets.ModelViewSet):
     
     @action(detail=False, methods=['get'])
     def baixo_estoque(self, request):
-        produtos = self.get_queryset().filter(quantidade__lte=models.F('estoque_minimo'))
+        produtos = self.get_queryset().filter(quantidade__lte=F('estoque_minimo'))
         serializer = self.get_serializer(produtos, many=True)
         return Response(serializer.data)
     
@@ -232,7 +234,7 @@ class DashboardViewSet(viewsets.ViewSet):
             created_at__date=timezone.now().date()
         ).count()
         produtos_baixo_estoque = Produto.objects.filter(
-            quantidade__lte=models.F('estoque_minimo')
+            quantidade__lte=F('estoque_minimo')
         ).count()
         
         from django.db.models import Count, Sum
@@ -250,3 +252,37 @@ class DashboardViewSet(viewsets.ViewSet):
             'produtos_baixo_estoque': produtos_baixo_estoque,
             'produtos_mais_movimentados': list(produtos_mais_movimentados)
         })
+    
+# NO FINAL do seu arquivo api/views.py, adicione:
+
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def custom_login(request):
+    email = request.data.get('email')
+    password = request.data.get('password')
+    
+    # Autentica usando email
+    user = authenticate(username=email, password=password)
+    
+    if user:
+        # Gera tokens JWT
+        refresh = RefreshToken.for_user(user)
+        
+        return Response({
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
+            'user': {
+                'id': user.id,
+                'email': user.email,
+                'username': user.username,
+                'first_name': user.first_name,
+                'last_name': user.last_name,
+            }
+        })
+    
+    return Response(
+        {'error': 'Credenciais inválidas'},
+        status=status.HTTP_401_UNAUTHORIZED
+    )
